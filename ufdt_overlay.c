@@ -702,11 +702,12 @@ fail:
  *
  * `main_fdt_header` is getting overrided by result tree, so it must
  * have enough space (provided by `main_fdt_buffer_size`) to store it.
+ * The result tree is packed, i.e. it has no free space left in it.
  * `main_fdt_header` and all `overlays` must be 8 bytes aligned.
  *
  * `dto_malloc` is used for:
  * - ufdt structures around main fdt and overlays.
- * - result tree temporary buffer at most `main_fdt_buffer_size` size.
+ * - result tree temporary buffer of the summed size of main fdt and overlays.
  *
  * TODO(b/362830550): expose a more comprehensive error type.
  * Returns 0 or -1 in case of error.
@@ -755,14 +756,6 @@ int ufdt_apply_multioverlay(struct fdt_header *main_fdt_header,
     }
   }
 
-  if (result_size > main_fdt_buffer_size) {
-    dto_error(
-        "Not enough space in main_fdt to apply the overlays. Required %d, "
-        "available: %d\n",
-        result_size, main_fdt_buffer_size);
-    goto error;
-  }
-
   // ufdt tree has references to fdt buffer, so we cannot dump ufdt to
   // underlying fdt buffer directly. allocate intermediate buffer for that.
   temporary_buffer = dto_malloc(result_size);
@@ -778,9 +771,25 @@ int ufdt_apply_multioverlay(struct fdt_header *main_fdt_header,
         "Failed to dump the result device tree to the temporary buffer\n");
     goto error;
   }
+
+  // pack to get the actual result size, result_size is only an upper bound.
+  err = fdt_pack(temporary_buffer);
+  if (err < 0) {
+    dto_error("Failed to pack the result device tree\n");
+    goto error;
+  }
+
+  size_t packed_size = fdt_totalsize(temporary_buffer);
+  if (packed_size > main_fdt_buffer_size) {
+    dto_error(
+        "Not enough space in main_fdt to apply the overlays. Required %zu, "
+        "available: %zu\n",
+        packed_size, main_fdt_buffer_size);
+    goto error;
+  }
   ufdt_destruct(main_tree, &pool);
 
-  dto_memcpy(main_fdt_header, temporary_buffer, result_size);
+  dto_memcpy(main_fdt_header, temporary_buffer, packed_size);
   dto_free(temporary_buffer);
   ufdt_node_pool_destruct(&pool);
 

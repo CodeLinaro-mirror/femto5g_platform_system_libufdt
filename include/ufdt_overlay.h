@@ -44,11 +44,12 @@ struct fdt_header *ufdt_apply_overlay(struct fdt_header *main_fdt_header,
  *
  * `main_fdt_header` is getting overrided by result tree, so it must
  * have enough space (provided by `main_fdt_buffer_size`) to store it.
+ * The result tree is packed, i.e. it has no free space left in it.
  * `main_fdt_header` and all `overlays` must be 8 bytes aligned.
  *
  * `dto_malloc` is used for:
  * - ufdt structures around main fdt and overlays.
- * - result tree temporary buffer at most `main_fdt_buffer_size` size.
+ * - result tree temporary buffer of the summed size of main fdt and overlays.
  *
  * TODO(b/362830550): expose a more comprehensive error type.
  * Returns 0 or -1 in case of error.
